@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 
@@ -6,12 +7,18 @@ import polars as pl
 import pyarrow as pa
 
 
-def read_csv_file(path: str) -> pl.DataFrame:
+def read_file(path: str) -> pl.DataFrame:
 
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found {path}")
-    else:
+    elif path.endswith(".csv"):
         df = pl.read_csv(path)
+    elif path.endswith(".parquet"):
+        df = pl.read_parquet(path)
+    elif path.endswith(".json"):
+        df = pl.read_json(path)
+    else:
+        raise ValueError(f"Unsupported file type {path}")
 
     return df
 
@@ -26,21 +33,22 @@ def write_to_stdout(df: pl.DataFrame):
     sys.stdout.buffer.write(sink.getvalue().to_pybytes())
 
 
-parser = argparse.ArgumentParser(
-    prog="sidecar",
-    description="sidecar for plore extension",
-    epilog="Text at the bottom of help",
-)
+def main():
+    parser = argparse.ArgumentParser(
+        prog="sidecar",
+        description="sidecar for plore extension",
+    )
+
+    parser.add_argument("filename")
+    args = parser.parse_args()
+
+    try:
+        df = read_file(args.filename)
+        write_to_stdout(df)
+    except (FileNotFoundError, ValueError) as e:
+        sys.stderr.write(json.dumps({"error": str(e)}) + "\n")
+        sys.exit(1)
 
 
-parser.add_argument("filename")
-args = parser.parse_args()
-
-# TODO: wrap in main() + if __name__ == "__main__" guard
-# TODO: handle errors as JSON to stderr instead of raw tracebacks
-# TODO: extend load_file() to dispatch on extension (.csv, .parquet, .json)
-
-# Orchestrate
-
-df = read_csv_file(args.filename)
-write_to_stdout(df)
+if __name__ == "__main__":
+    main()
